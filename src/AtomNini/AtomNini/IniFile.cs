@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 
 namespace AtomNini
@@ -13,30 +12,37 @@ namespace AtomNini
     {
         #region fields
 
-        private static List<Type> _nullablePrimitiveTypes = new List<Type>()
+        private static List<Type> _simpleTypes = new List<Type>()
         {
-            typeof(bool?),typeof(char?),
-
-            typeof(double?),typeof(float?),typeof(decimal?),
-
-            typeof(sbyte?),typeof(short?),typeof(int?),typeof(long?),
-
-            typeof(byte?),typeof(ushort?),typeof(uint?), typeof(ulong?),
-
-            typeof(DateTime?)
-        };
-
-        private static List<Type> _primitiveTypes = new List<Type>()
-        {
-            typeof(bool),typeof(char),
-
-            typeof(double),typeof(float),typeof(decimal),
-
-            typeof(sbyte),typeof(short),typeof(int),typeof(long),
-
-            typeof(byte),typeof(ushort),typeof(uint),typeof(ulong),
-
-            typeof(DateTime)
+            typeof(string),
+            typeof(int),
+            typeof(double),
+            typeof(bool),
+            typeof(float),
+            typeof(DateTime),
+            typeof(long),
+            typeof(short),
+            typeof(ushort),
+            typeof(uint),
+            typeof(ulong),
+            typeof(sbyte),
+            typeof(byte),
+            typeof(decimal),
+            typeof(char),
+            typeof(bool?),
+            typeof(char?),
+            typeof(double ?),
+            typeof(float ?),
+            typeof(decimal ?),
+            typeof(sbyte ?),
+            typeof(short ?),
+            typeof(int ?),
+            typeof(long ?),
+            typeof(byte ?),
+            typeof(ushort ?),
+            typeof(uint ?),
+            typeof(ulong ?),
+            typeof(DateTime?),
         };
 
         private IniDocument _document;
@@ -59,6 +65,7 @@ namespace AtomNini
 
         internal IniFile(string filePath, IniFileType iniFileType) : this(filePath, Encoding.Default, iniFileType)
         {
+            //result = Convert.ChangeType(value, typeof(T)) as T?;
         }
 
         internal IniFile(string filePath, Encoding encoding, IniFileType iniFileType)
@@ -66,7 +73,7 @@ namespace AtomNini
             _filePath = filePath;
             _encoding = encoding;
 
-            _document = new IniDocument(new StreamReader(new FileStream(filePath, FileMode.OpenOrCreate), encoding), iniFileType);
+            _document = new IniDocument(new StreamReader(new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite), encoding), iniFileType);
 
             _watcher = new FileSystemWatcher();
             _watcher.Path = Path.GetDirectoryName(filePath);
@@ -83,7 +90,7 @@ namespace AtomNini
             {
                 _watcher.EnableRaisingEvents = false;
                 if (e.ChangeType == WatcherChangeTypes.Changed)
-                    Reload();
+                    _document.Load(new StreamReader(new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite), _encoding));
                 _watcher.EnableRaisingEvents = true;
             }
             finally
@@ -94,51 +101,38 @@ namespace AtomNini
 
         #endregion ctors
 
-        #region Helper Method
+        #region Helper Methods
 
-        public static TValue ConvertToTargetType<TValue>(string valueOfKey)
+        public static TValue ConvertToTargetType<TValue>(string valueOfKey, IFormatProvider provider) where TValue : struct
         {
             Type returnType = typeof(TValue);
-
-            try
+            if (!_simpleTypes.Contains(returnType))
             {
-                /********** 当字符串是空字符串或NULl时 ***********/
+                throw new ArgumentException($"TValue must be one of the following types:{string.Join(",", _simpleTypes)}.");
+            }
 
-                if (string.IsNullOrEmpty(valueOfKey))
+            if (string.IsNullOrEmpty(valueOfKey))
+            {
+                if (returnType == typeof(string) || Nullable.GetUnderlyingType(returnType) != null)
                 {
-                    // 可空值类型返回NULL
-                    if (Nullable.GetUnderlyingType(returnType) != null)
-                    {
-                        return default;
-                    }
-                    // 不可空值类型抛出异常
-                    if (returnType.IsValueType)
-                    {
-                        throw new FormatException($"Failed to change {{{valueOfKey}}} to type {{{returnType.FullName}}}.");
-                    }
-                    // 引用类型返回NULL
-                    else
-                    {
-                        return default;
-                    }
+                    return default;
                 }
-
-                /********** 当字符串不为空或NULL时 ***********/
-
-                if (_primitiveTypes.Contains(returnType) || returnType == typeof(string))
+                else
+                {
+                    throw new FormatException($"Failed to change {{{valueOfKey}}} to type {{{returnType.FullName}}}.");
+                }
+            }
+            else
+            {
+                Type type = Nullable.GetUnderlyingType(returnType);
+                if (type != null)
+                {
+                    return (TValue)Convert.ChangeType(valueOfKey, type, provider);
+                }
+                else
                 {
                     return (TValue)Convert.ChangeType(valueOfKey, returnType);
                 }
-
-                if (_nullablePrimitiveTypes.Contains(returnType))
-                {
-                    return (TValue)Convert.ChangeType(valueOfKey, Nullable.GetUnderlyingType(returnType));
-                }
-                return JsonSerializer.Deserialize<TValue>(valueOfKey);
-            }
-            catch
-            {
-                throw new InvalidCastException($"Failed to change {{{valueOfKey}}} to type {{{returnType.FullName}}}.");
             }
         }
 
@@ -150,29 +144,21 @@ namespace AtomNini
                 valueStringFormat = string.Empty;
                 return valueStringFormat;
             }
-
             Type valueTypeToSet = valueToSet.GetType();
-            if (_primitiveTypes.Contains(valueTypeToSet) || _nullablePrimitiveTypes.Contains(valueTypeToSet) || valueTypeToSet == typeof(string))
-            {
-                valueStringFormat = valueToSet.ToString();
-            }
-            else
-            {
-                JsonSerializerOptions options = new JsonSerializerOptions()
-                {
-                    WriteIndented = false
-                };
-
-                valueStringFormat = JsonSerializer.Serialize(valueToSet, options);
-            }
+            valueStringFormat = valueToSet.ToString();
             return valueStringFormat;
         }
 
-        #endregion Helper Method
+        #endregion Helper Methods
 
         #region Get
 
-        public TValue GetValue<TValue>(string section, string key)
+        public string GetValue(string section, string key, IFormatProvider provider)
+        {
+            return GetValue<string>(section, key);
+        }
+
+        public TValue GetValue<TValue>(string section, string key) where TValue : struct
         {
             _lock.EnterReadLock();
             try
@@ -349,17 +335,14 @@ namespace AtomNini
 
         public (bool isExistSection, bool isExistKey, string oldValue) SetValue(string section, string key, object value)
         {
-            string oldValue;
-            string valueString;
-
-            valueString = ConvertToStringFormat(value);
+            var valueString = ConvertToStringFormat(value);
 
             _lock.EnterUpgradeableReadLock();
             try
             {
                 if (_document.Sections[section] != null)
                 {
-                    oldValue = _document.Sections[section].GetValue(key);
+                    var oldValue = _document.Sections[section].GetValue(key);
                     if (oldValue == valueString)
                     {
                         return (true, true, oldValue);
@@ -387,7 +370,7 @@ namespace AtomNini
                     try
                     {
                         _document.Sections.Add(new IniSection(section));
-                        _document.Sections[section].Set(key, valueString);
+                        _document.Sections[section]?.Set(key, valueString);
                         _watcher.EnableRaisingEvents = false;
                         _document.Save(_filePath, _encoding);
                         _watcher.EnableRaisingEvents = true;
@@ -538,7 +521,7 @@ namespace AtomNini
             _lock.EnterWriteLock();
             try
             {
-                _document.Load(_filePath, _encoding);
+                _document.Load(new StreamReader(new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite), _encoding));
             }
             finally { _lock.ExitWriteLock(); }
         }
