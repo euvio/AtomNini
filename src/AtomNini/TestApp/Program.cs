@@ -16,7 +16,7 @@ namespace TestApp
            
             while(true)
             {
-                string ip = ini.GetValue("PLC", "IP");
+                string ip = ini.GetValue<string>("PLC", "IP");
                 Console.WriteLine(ip);
                 
             }

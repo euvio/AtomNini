@@ -8,11 +8,11 @@ namespace AtomNiniTest
         public void Test1()
         {
             IniFile ini = IniFileManager.GetIniFile("./test.ini");
-            string ip = ini.GetValue("PLC", "IP");
+            string ip = ini.GetValue<string>("PLC", "IP");
 
             Thread.Sleep(10000);
 
-            Assert.False(ip == ini.GetValue("PLC", "IP"));
+            Assert.False(ip == ini.GetValue<string>("PLC", "IP"));
         }
     }
 }

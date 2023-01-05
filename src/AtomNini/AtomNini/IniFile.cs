@@ -75,12 +75,12 @@ namespace AtomNini
 
             _document = new IniDocument(new StreamReader(new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite), encoding), iniFileType);
 
-            _watcher = new FileSystemWatcher();
-            _watcher.Path = Path.GetDirectoryName(filePath);
-            _watcher.Filter = Path.GetFileName(filePath);
-            _watcher.NotifyFilter = NotifyFilters.LastWrite;
-            _watcher.Changed += _watcher_Changed;
-            _watcher.EnableRaisingEvents = true;
+            //_watcher = new FileSystemWatcher();
+            //_watcher.Path = Path.GetDirectoryName(filePath);
+            //_watcher.Filter = Path.GetFileName(filePath);
+            //_watcher.NotifyFilter = NotifyFilters.LastWrite;
+            //_watcher.Changed += _watcher_Changed;
+            //_watcher.EnableRaisingEvents = true;
         }
 
         private void _watcher_Changed(object sender, FileSystemEventArgs e)
@@ -103,7 +103,7 @@ namespace AtomNini
 
         #region Helper Methods
 
-        public static TValue ConvertToTargetType<TValue>(string valueOfKey, IFormatProvider provider) where TValue : struct
+        public static TValue ConvertToTargetType<TValue>(string valueOfKey) 
         {
             Type returnType = typeof(TValue);
             if (!_simpleTypes.Contains(returnType))
@@ -127,7 +127,7 @@ namespace AtomNini
                 Type type = Nullable.GetUnderlyingType(returnType);
                 if (type != null)
                 {
-                    return (TValue)Convert.ChangeType(valueOfKey, type, provider);
+                    return (TValue)Convert.ChangeType(valueOfKey, type);
                 }
                 else
                 {
@@ -144,7 +144,6 @@ namespace AtomNini
                 valueStringFormat = string.Empty;
                 return valueStringFormat;
             }
-            Type valueTypeToSet = valueToSet.GetType();
             valueStringFormat = valueToSet.ToString();
             return valueStringFormat;
         }
@@ -153,12 +152,17 @@ namespace AtomNini
 
         #region Get
 
-        public string GetValue(string section, string key, IFormatProvider provider)
+        public string GetValue(string section, string key)
         {
             return GetValue<string>(section, key);
         }
 
-        public TValue GetValue<TValue>(string section, string key) where TValue : struct
+        public (string value, bool isExistSection, bool isExistKey) GetValue(string section, string key, string defaultValue = default)
+        {
+            return GetValue<string>(section, key, defaultValue);
+        }
+
+        public TValue GetValue<TValue>(string section, string key) 
         {
             _lock.EnterReadLock();
             try
